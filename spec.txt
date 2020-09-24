@@ -1,0 +1,72 @@
+GET /api/v1/albums
+	Gets all albums, returning the following for each one:
+		uuid
+		title
+		day, month, year of release
+		number of tracks
+		artist(s): uuid, name
+
+GET /api/v1/artists
+	Gets all artists, sorted by name, returning the following for each one:
+		uuid
+		name
+		total tracks
+		uuids of albums for which they are a primary artist ("albums")
+		uuids of albums containing a track on which they are credited ("appearances")
+
+GET /api/v1/tracks
+	?sort=some combination of [album_artist, album_date, album_title, track_number, track_title, track_artist] default: the first 5
+	Gets all tracks, returning the following for each one:
+		uuid
+		title
+		duration (ms)
+		disc, track
+		album: uuid, title
+		artist(s): uuid, name
+
+GET /api/v1/album/{uuid}
+	Returns one from /api/v1/albums
+	That entry also contains a json array "tracks", which contains all tracks (see /api/v1/tracks format), except the album field
+
+GET /api/v1/coverart/{album_uuid}
+	Returns an image
+
+GET /api/v1/plists
+	Gets all playlist UUIDs and names, sorted by name
+
+GET /api/v1/plist/{uuid}
+	No parameters
+	Returns playlist {uuid} as json array
+
+POST /api/v1/multiget
+	Takes json body array of url's
+	Returns responses to all of them
+
+GET /api/v1/search
+	?q=search query text
+
+GET /api/v1/stream
+	?t=track uuid
+	?q=quality (0-9)
+
+DELETE /api/v1/plist/{uuid}
+	Deletes playlist {uuid}
+
+POST /api/v1/plist/{uuid}/insert
+	?at=index
+	?items=comma separated list of track uuid
+	Inserts those items into playlist {uuid}
+
+POST /api/v1/plist/{uuid}/reorder
+	?src=index
+	?dst=index
+	?len=number of elements. if unset, 1
+
+POST /api/v1/plist/{uuid}/remove
+	?at=index
+	?len=number of elements. if unset, 1
+
+PUT /api/v1/plist/{uuid}
+	No parameters
+	Takes json body array of uuid
+	Sets playlist
