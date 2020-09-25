@@ -1,4 +1,6 @@
 #include "http.h"
+#include <algorithm>
+#include <cassert>
 #include <fstream>
 
 void surf_server::api_v1_albums(http_server::session* sn)
@@ -382,4 +384,89 @@ void surf_server::api_v1_coverart(http_server::session* sn, const std::string& a
 	} else {
 		sn->serve_error(500, "Failed to open coverart " + album_uuid + ".");
 	}
+}
+
+static int fuzzysubmatch(const std::string& needle, const std::string& haystack)
+{
+	// https://en.wikibooks.org/wiki/Algorithm_Implementation/Strings/Levenshtein_distance#D
+	// http://ginstrom.com/scribbles/2007/12/01/fuzzy-substring-matching-with-levenshtein-distance-in-python/
+	std::vector<std::vector<int>> distance(needle.length() + 1);
+	for (auto it = distance.begin(); it != distance.end(); ++it)
+		it->resize(haystack.length() + 1);
+
+	for (size_t i = 0; i <= needle.length(); i++) {
+		distance[i][0] = i;
+		distance[0][i] = std::min(i, 1UL);
+	}
+
+	for (size_t i = 1; i <= needle.length(); i++) {
+		for (size_t j = 1; j <= haystack.length(); j++) {
+			int del = distance[i - 1][j] + 1,
+				ins = distance[i][j - 1] + 1,
+				mcost = (needle[i - 1] == haystack[j - 1] ? 0 : 1),
+				sub = distance[i - 1][j - 1] + mcost;
+			distance[i][j] = std::min(del, std::min(ins, sub));
+
+			if (i > 1 && j > 1 && needle[i - 1] == haystack[j - 2] && needle[i - 2] == haystack[j - 1]) {
+				distance[i][j] = std::min(distance[i][j], distance[i - 2][j - 2] + mcost);
+			}
+		}
+	}
+	return *std::min_element(distance[needle.length()].begin(), distance[needle.length()].end());
+}
+
+static void fuzzysubmatch_xf(sqlite3_context* ctx, int argc, sqlite3_value** argv)
+{
+	assert(argc == 2);
+	sqlite3_result_int(ctx, fuzzysubmatch(
+		reinterpret_cast<const char*>(sqlite3_value_text(argv[0])),
+		reinterpret_cast<const char*>(sqlite3_value_text(argv[1]))));
+}
+
+void surf_server::api_v1_search(http_server::session* sn, const std::string& oq)
+{
+	constexpr double SIMILARITY_CUTOFF = 0.45;
+	if (oq.length() < 2) {
+		sn->set_status_code(200);
+		sn->set_response_header("Content-type", "application/json");
+		return sn->write("[]", 2);
+	}
+
+	db_connection dbc = mdb.dbconn();
+	sqlite3_stmt *stmt = nullptr;
+	int rc, err = 0;
+	std::string query = oq;
+	json resp = json::array();
+
+	std::transform(query.begin(), query.end(), query.begin(), ::tolower);
+	sqlite3_create_function(dbc.handle(), "FUZZYFIND", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC, nullptr, fuzzysubmatch_xf, nullptr, nullptr);
+	if ((rc = sqlite3_prepare_v2(dbc.handle(),
+		"SELECT UUID, FUZZYFIND(?, LOWER(TITLE)) AS SIML, 'albums' AS TYPE FROM ALBUMS WHERE SIML <= ? UNION ALL "
+		"SELECT UUID, FUZZYFIND(?, LOWER(TITLE)) AS SIML, 'tracks' AS TYPE FROM TRACKS WHERE SIML <= ? UNION ALL "
+		"SELECT UUID, FUZZYFIND(?, LOWER(NAME)) AS SIML, 'artists' AS TYPE FROM ARTISTS WHERE SIML <= ? UNION ALL "
+		"SELECT UUID, FUZZYFIND(?, LOWER(NAME)) AS SIML, 'playlists' AS TYPE FROM PLAYLISTS WHERE SIML <= ?"
+		"ORDER BY SIML",
+		-1, &stmt, nullptr)) != SQLITE_OK)
+		throw std::runtime_error("could not prepare /api/v1/search SQL");
+	for (int i = 0; i < 4; i++) {
+		sqlite3_bind_text(stmt, 2 * i + 1, query.c_str(), -1, SQLITE_STATIC);
+		sqlite3_bind_int(stmt, 2 * i + 2, round(query.length() * SIMILARITY_CUTOFF));
+	}
+
+	while ((rc = sqlite3_step(stmt)) != SQLITE_DONE) {
+		if (rc == SQLITE_BUSY)
+			continue;
+		else if (rc == SQLITE_MISUSE)
+			throw std::runtime_error("sqlite misuse at " __FILE__ "@" + std::to_string(__LINE__) + ".");
+		else if (rc != SQLITE_ROW)
+			throw std::runtime_error("could not step through /api/v1/search SQL: " + std::string(sqlite3_errmsg(dbc.handle())));
+
+		resp.push_back({
+			{"uuid", reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0))},
+			{"score", sqlite3_column_int(stmt, 1)},
+			{"type", reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2))},
+		});
+	}
+	sqlite3_finalize(stmt);
+	write_json(sn, resp);
 }

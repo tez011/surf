@@ -69,6 +69,9 @@ void surf_server::pick_route(http_server::session* sn)
 	} else if (std::regex_match(sn->request_path(), sm, std::regex("/api/v1/coverart/([^/]*)"))) {
 		if (check_mdb_modified_date(sn) == false)
 			api_v1_coverart(sn, sm[1]);
+	} else if (sn->request_path() == "/api/v1/search" && sn->request_param("q")) {
+		if (check_mdb_modified_date(sn) == false)
+			api_v1_search(sn, sn->request_param("q").value());
 	} else if (std::regex_match(sn->request_path(), sm, std::regex("/api/v1/stream/([^/]*)"))) {
 		if (check_mdb_modified_date(sn) == false) {
 			int quality = 6;
