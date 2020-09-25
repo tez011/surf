@@ -1,7 +1,7 @@
 #include "http.h"
 #include <fstream>
 
-void surf_server::api_v1_albums(http_server::session* sess)
+void surf_server::api_v1_albums(http_server::session* sn)
 {
 	db_connection dbc = mdb.dbconn();
 	sqlite3_stmt *stmt = nullptr;
@@ -61,10 +61,10 @@ void surf_server::api_v1_albums(http_server::session* sess)
 	}
 	resp.push_back(current);
 	sqlite3_finalize(stmt);
-	write_json(sess, resp);
+	write_json(sn, resp);
 }
 
-void surf_server::api_v1_artists(http_server::session* sess)
+void surf_server::api_v1_artists(http_server::session* sn)
 {
 	db_connection dbc = mdb.dbconn();
 	sqlite3_stmt *stmt = nullptr;
@@ -121,10 +121,10 @@ void surf_server::api_v1_artists(http_server::session* sess)
 	current["total_tracks"] = total_tracks;
 	resp.push_back(current);
 	sqlite3_finalize(stmt);
-	write_json(sess, resp);
+	write_json(sn, resp);
 }
 
-void surf_server::api_v1_tracks(http_server::session* sess, const std::string& _sort)
+void surf_server::api_v1_tracks(http_server::session* sn, const std::string& _sort)
 {
 	// Transform/sanitize sort parameters.
 	auto sort = tokenize(_sort, ",");
@@ -141,13 +141,8 @@ void surf_server::api_v1_tracks(http_server::session* sess, const std::string& _
 			*it = "T.TITLE";
 		else if (*it == "track_artist")
 			*it = "T.ARTISTSTR";
-		else {
-			sess->set_status_code(400);
-			sess->set_response_header("Cache-Control", "public; max-age=86400");
-			sess->set_response_header("Content-length", "17");
-			sess->write("400 Bad Request\r\n", 17);
-			return sess->reset();
-		}
+		else
+			sn->serve_error(400, "Bad 'sort' parameter\r\n");
 	}
 
 	db_connection dbc = mdb.dbconn();
@@ -213,10 +208,10 @@ void surf_server::api_v1_tracks(http_server::session* sess, const std::string& _
 	}
 	resp.push_back(current);
 	sqlite3_finalize(stmt);
-	write_json(sess, resp);
+	write_json(sn, resp);
 }
 
-void surf_server::api_v1_album(http_server::session* sess, const std::string& album_uuid)
+void surf_server::api_v1_album(http_server::session* sn, const std::string& album_uuid)
 {
 	db_connection dbc = mdb.dbconn();
 	sqlite3_stmt *stmt = nullptr;
@@ -272,6 +267,14 @@ void surf_server::api_v1_album(http_server::session* sess, const std::string& al
 		}
 	}
 	sqlite3_finalize(stmt);
+	if (first_row) {
+		// no album was found
+		sn->set_status_code(404);
+		sn->set_response_header("Cache-Control", "no-store");
+		sn->set_response_header("Content-type", "text/plain; charset=utf-8");
+		sn->set_response_header("Content-Length", "11");
+		return sn->write("Not Found\r\n", 11);
+	}
 
 	std::string last_uuid = "";
 	json current;
@@ -327,10 +330,10 @@ void surf_server::api_v1_album(http_server::session* sess, const std::string& al
 	}
 	resp["tracks"].push_back(current);
 	sqlite3_finalize(stmt);
-	write_json(sess, resp);
+	write_json(sn, resp);
 }
 
-void surf_server::api_v1_coverart(http_server::session* sess, const std::string& album_uuid)
+void surf_server::api_v1_coverart(http_server::session* sn, const std::string& album_uuid)
 {
 	db_connection dbc = mdb.dbconn();
 	sqlite3_stmt *stmt = nullptr;
@@ -351,12 +354,8 @@ void surf_server::api_v1_coverart(http_server::session* sess, const std::string&
 		throw std::runtime_error("could not step through /api/v1/coverart SQL: " + std::string(sqlite3_errmsg(dbc.handle())));
 	sqlite3_finalize(stmt);
 
-	if (!coverart_path.has_value()) {
-		sess->set_status_code(404);
-		sess->set_response_header("Content-length", "11");
-		sess->write("Not Found\r\n", 11);
-		return sess->reset();
-	}
+	if (!coverart_path.has_value())
+		return sn->serve_error(404, "Not Found\r\n");
 
 	std::string ext = coverart_path->substr(coverart_path->find_last_of('.') + 1);
 	std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
@@ -365,27 +364,22 @@ void surf_server::api_v1_coverart(http_server::session* sess, const std::string&
 	else if (ext != "png" && ext != "jpeg")
 		ext = "xyz";
 
-	std::ifstream ps(coverart_path->c_str(), std::ios_base::in | std::ios_base::ate | std::ios_base::binary);
+	std::ifstream ps(coverart_path.value(), std::ios_base::in | std::ios_base::ate | std::ios_base::binary);
 	if (ps) {
-		sess->set_status_code(200);
-		sess->set_response_header("Content-type", "image/" + ext);
-		sess->set_response_header("Cache-Control", "public; max-age=31536000");
-		sess->set_response_header("Last-Modified", http_server::format_time(std::chrono::system_clock::to_time_t(mdb.latest_mod_time())));
-		sess->set_response_header("Content-length", std::to_string(ps.tellg()));
+		sn->set_status_code(200);
+		sn->set_response_header("Content-type", "image/" + ext);
+		sn->set_response_header("Cache-Control", "public; max-age=31536000");
+		sn->set_response_header("Last-Modified", http_server::format_time(std::chrono::system_clock::to_time_t(mdb.latest_mod_time())));
+		sn->set_response_header("Content-length", std::to_string(ps.tellg()));
 		ps.clear();
 		ps.seekg(0);
 
 		std::vector<char> pbuf(8192);
 		while (!ps.eof()) {
 			ps.read(pbuf.data(), pbuf.size());
-			sess->write(pbuf.data(), ps.gcount());
+			sn->write(pbuf.data(), ps.gcount());
 		}
 	} else {
-		std::string body = "Failed to open coverart " + album_uuid + ".";
-		sess->set_status_code(500);
-		sess->set_response_header("Content-type", "text/plain");
-		sess->set_response_header("Content-length", std::to_string(body.length()));
-		sess->write(body.data(), body.length());
+		sn->serve_error(500, "Failed to open coverart " + album_uuid + ".");
 	}
-	sess->reset();
 }

@@ -172,11 +172,34 @@ void mediadb::scan_path(const fs::path& _path)
 		sqlite3_finalize(prep_stmt[i]);
 }
 
+std::optional<std::string> mediadb::get_track_path(const std::string& track_uuid)
+{
+	db_connection dbc = dbconn();
+	sqlite3_stmt *stmt = nullptr;
+	std::optional<std::string> track_path;
+	int rc;
+
+	if ((rc = sqlite3_prepare_v2(dbc.handle(), "SELECT LOCATION FROM TRACKS WHERE UUID = ? LIMIT 1", -1, &stmt, nullptr)) != SQLITE_OK)
+		throw std::runtime_error("could not prepare track retrieval SQL");
+	sqlite3_bind_text(stmt, 1, track_uuid.c_str(), -1, SQLITE_STATIC);
+	do { rc = sqlite3_step(stmt); } while (rc == SQLITE_BUSY);
+	if (rc == SQLITE_MISUSE)
+		throw std::runtime_error("sqlite misuse at " __FILE__ "@" + std::to_string(__LINE__) + ".");
+	else if (rc == SQLITE_DONE)
+		track_path = std::nullopt;
+	else if (rc == SQLITE_ROW)
+		track_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+	else
+		throw std::runtime_error("could not step through track retrieval SQL: " + std::string(sqlite3_errmsg(dbc.handle())));
+	sqlite3_finalize(stmt);
+	return track_path;
+}
+
 std::pair<std::string, bool> mediadb::get_cached_transcode(const std::string& track_uuid, int quality)
 {
 	std::stringstream ss;
 	ss << track_uuid << '.' << quality << ".mp3";
-	fs::path cache_loc = fs::canonical(cache_path / ss.str());
+	fs::path cache_loc = fs::absolute(cache_path / ss.str());
 	bool is_ok = fs::exists(cache_loc) && fs::file_size(cache_loc) > 0;
 
 	cache.put(cache_loc);

@@ -8,7 +8,8 @@ list(APPEND SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/mediadb.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/mediascan.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/muslib_get.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/server.cpp)
+	${CMAKE_CURRENT_SOURCE_DIR}/server.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/stream.cpp)
 
 ################ Submodules ################
 

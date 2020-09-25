@@ -2,6 +2,7 @@
 #include <array>
 #include "config.h"
 #include <filesystem>
+#include <optional>
 #include <sqlite3.h>
 #include <string>
 #include <vector>
@@ -87,6 +88,7 @@ public:
 	inline db_connection dbconn() { return db_connection((media_path / APP_NAME ".db").string()); };
 
 	void scan_path(const fs::path& path);
+	std::optional<std::string> get_track_path(const std::string& track_uuid);
 	std::pair<std::string, bool> get_cached_transcode(const std::string& track_uuid, int quality);
 	std::chrono::system_clock::time_point latest_mod_time() const;
 };

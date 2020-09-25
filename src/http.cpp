@@ -71,8 +71,6 @@ void http_server::session::reset()
 	parse_buf_len = 0;
 	response.status_code = 0;
 	response.header_written = false;
-
-	start();
 }
 
 void http_server::session::start()
@@ -118,6 +116,8 @@ void http_server::session::start()
 				}
 
 				server->pick_route(this);
+				sbuf_off = 0;
+				reset();
 			} else if (pret == -1) {
 				std::cerr << "httpreadfail parse" << std::endl;
 				socket_.close();

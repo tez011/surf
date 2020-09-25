@@ -35,7 +35,7 @@ public:
 			bool header_written = false;
 		} response;
 
-		void start();
+		void reset();
 	public:
 		session(http_server *server, sockpp::tcp_socket&& sock) : server(server), socket_(std::move(sock))
 		{
@@ -45,8 +45,6 @@ public:
 		{
 			return socket_;
 		}
-
-		void reset();
 
 		inline const std::string& request_method() { return request.method; };
 		inline const std::string& request_path() { return request.url; };
@@ -69,11 +67,13 @@ public:
 				return it->second;
 		}
 
+		void start();
 		bool set_status_code(int code);
 		inline void set_response_header(const std::string& header, const std::string& value) { response.headers[header] = value; };
 		inline void clear_response_headers() { response.headers.clear(); };
 		void write_headers();
 		void write(const char *data, size_t length);
+		void serve_error(int status_code, const std::string& msg);
 	};
 
 protected:
@@ -99,29 +99,32 @@ private:
 	bool stop;
 
 	/* GET requests, return JSON, can be used in multiget */
-	void api_v1_albums(http_server::session* session);
-	void api_v1_artists(http_server::session* session);
-	void api_v1_tracks(http_server::session* session, const std::string& sort);
-	void api_v1_album(http_server::session* session, const std::string& album_uuid);
-	void api_v1_coverart(http_server::session* session, const std::string& album_uuid);
+	void api_v1_albums(http_server::session* sn);
+	void api_v1_artists(http_server::session* sn);
+	void api_v1_tracks(http_server::session* sn, const std::string& sort);
+	void api_v1_album(http_server::session* sn, const std::string& album_uuid);
+	void api_v1_coverart(http_server::session* sn, const std::string& album_uuid);
 	void api_v1_plists(http_server::session* session);
-	void api_v1_plist_GET(http_server::session* session, const std::string& plist_uuid);
+	void api_v1_plist_GET(http_server::session* sn, const std::string& plist_uuid);
 
 	/* POST */
 	void api_v1_multiget(http_server::session* session);
-	void api_v1_plist_insert(http_server::session* session, int at, const std::vector<std::string>& tracks);
-	void api_v1_plist_reorder(http_server::session* session, int src, int dst, int len);
-	void api_v1_plist_remove(http_server::session* session, int at, int len);
+	void api_v1_plist_insert(http_server::session* sn, int at, const std::vector<std::string>& tracks);
+	void api_v1_plist_reorder(http_server::session* sn, int src, int dst, int len);
+	void api_v1_plist_remove(http_server::session* sn, int at, int len);
 
 	/* GET */
-	void api_v1_search(http_server::session* session, const std::string& q);
-	void api_v1_stream(http_server::session* session, const std::string& track_uuid, int quality);
+	void api_v1_search(http_server::session* sn, const std::string& q);
+	void api_v1_stream(http_server::session* sn, const std::string& track_uuid, int quality);
 
-	void api_v1_plist_DELETE(http_server::session* session, const std::string& plist_uuid);
-	void api_v1_plist_PUT(http_server::session* session, const std::string& plist_uuid);
+	void api_v1_stream_cached(http_server::session* sn, const std::string& path_to_tc);
+	void api_v1_transcode(http_server::session* sn, const std::string& track_uuid, const std::string& track_path, int quality);
+
+	void api_v1_plist_DELETE(http_server::session* sn, const std::string& plist_uuid);
+	void api_v1_plist_PUT(http_server::session* sn, const std::string& plist_uuid);
 
 	bool check_mdb_modified_date(http_server::session* sess);
-	void write_json(http_server::session* session, const json& doc);
+	void write_json(http_server::session* sn, const json& doc);
 
 public:
 	surf_server(mediadb& mdb, unsigned short port);

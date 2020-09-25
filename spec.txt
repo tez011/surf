@@ -45,8 +45,7 @@ POST /api/v1/multiget
 GET /api/v1/search
 	?q=search query text
 
-GET /api/v1/stream
-	?t=track uuid
+GET /api/v1/stream/{uuid}
 	?q=quality (0-9)
 
 DELETE /api/v1/plist/{uuid}
