@@ -112,10 +112,9 @@ private:
 	void api_v1_plist_GET(http_server::session* sn, const std::string& plist_uuid);
 
 	/* POST */
-	void api_v1_multiget(http_server::session* session);
-	void api_v1_plist_insert(http_server::session* sn, int at, const std::vector<std::string>& tracks);
-	void api_v1_plist_reorder(http_server::session* sn, int src, int dst, int len);
-	void api_v1_plist_remove(http_server::session* sn, int at, int len);
+	void api_v1_plist_insert(http_server::session* sn, const std::string& plist_uuid);
+	void api_v1_plist_reorder(http_server::session* sn, const std::string& plist_uuid);
+	void api_v1_plist_remove(http_server::session* sn, const std::string& plist_uuid);
 
 	/* GET */
 	void api_v1_search(http_server::session* sn, const std::string& q);

@@ -104,10 +104,10 @@ void mediadb::init_db(sqlite3* db)
 		throw std::runtime_error("could not create playlists table: " + std::string(sqlite3_errstr(rc)));
 	if ((rc = sqlite3_exec(db,
 	"CREATE TABLE IF NOT EXISTS PLAYLISTTRACKS ("
-		"PLAYLIST TEXT NOT NULL REFERENCES PLAYLISTS(UUID),"
-		"RANK TEXT NOT NULL,"
+		"PLAYLIST TEXT NOT NULL REFERENCES PLAYLISTS(UUID) ON DELETE CASCADE,"
+		"RANK UNSIGNED INT NOT NULL,"
 		"TRACK TEXT NOT NULL REFERENCES TRACKS(UUID),"
-		"UNIQUE(PLAYLIST, RANK, TRACK))", nullptr, nullptr, nullptr)) != SQLITE_OK)
+		"UNIQUE(PLAYLIST, RANK))", nullptr, nullptr, nullptr)) != SQLITE_OK)
 		throw std::runtime_error("could not create playlist-tracks table: " + std::string(sqlite3_errstr(rc)));
 }
 

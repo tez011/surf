@@ -1,4 +1,5 @@
 #include "http.h"
+#include "mediadb.h"
 #include <iomanip>
 #include <regex>
 #include <sstream>
@@ -72,6 +73,35 @@ void surf_server::pick_route(http_server::session* sn)
 	} else if (sn->request_path() == "/api/v1/search" && sn->request_param("q")) {
 		if (check_mdb_modified_date(sn) == false)
 			api_v1_search(sn, sn->request_param("q").value());
+	} else if (sn->request_path() == "/api/v1/plists") {
+		if (check_mdb_modified_date(sn) == false)
+			api_v1_plists(sn);
+	} else if (std::regex_match(sn->request_path(), sm, std::regex("/api/v1/plist/([^/]*)"))) {
+		if (sn->request_method() == "GET") {
+			if (check_mdb_modified_date(sn) == false)
+				api_v1_plist_GET(sn, sm[1]);
+		} else if (sn->request_method() == "PUT")
+			api_v1_plist_PUT(sn, sm[1]);
+		else if (sn->request_method() == "DELETE")
+			api_v1_plist_DELETE(sn, sm[1]);
+		else {
+			sn->set_status_code(405);
+			sn->set_response_header("Content-type", "text/plain; charset=utf-8");
+			sn->set_response_header("Content-Length", "13");
+			sn->write("Not Allowed\r\n", 13);
+		}
+	} else if (std::regex_match(sn->request_path(), sm, std::regex("/api/v1/plist/(insert|reorder|remove)/([^/]*)"))) {
+		if (sn->request_method() == "POST") {
+			if (sm[1] == "insert")
+				api_v1_plist_insert(sn, sm[2]);
+			else if (sm[1] == "reorder")
+				api_v1_plist_reorder(sn, sm[2]);
+			else if (sm[1] == "remove")
+				api_v1_plist_remove(sn, sm[2]);
+			else
+				sn->serve_error(404, "Not Found\r\n");
+		} else
+			sn->serve_error(405, "Not Allowed\r\n");
 	} else if (std::regex_match(sn->request_path(), sm, std::regex("/api/v1/stream/([^/]*)"))) {
 		if (check_mdb_modified_date(sn) == false)
 			api_v1_stream(sn, sm[1]);
