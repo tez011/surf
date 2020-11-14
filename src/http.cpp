@@ -75,6 +75,7 @@ void http_server::session::reset()
 void http_server::session::start()
 {
 	int sbuf_off = 0;
+	size_t full_body_length = 0;
 	while (true) {
 		ssize_t r = socket_.read(sbuf.data() + sbuf_off, sbuf_size - sbuf_off);
 		if (r > 0) {
@@ -94,7 +95,7 @@ void http_server::session::start()
 
 					if (key == "content-length") {
 						try {
-							full_body_length = std::stoul(value);
+							full_body_length = std::min(1UL << 26, std::stoul(value));
 						} catch (...) {
 							full_body_length = 0;
 						}
@@ -122,9 +123,12 @@ void http_server::session::start()
 				}
 
 				if (full_body_length > 0) {
-					size_t read_length = std::min(full_body_length, static_cast<size_t>(sbuf_size - pret));
-					body_data.resize(read_length, 0);
-					std::copy(sbuf.begin() + pret, sbuf.begin() + pret + read_length, body_data.begin());
+					size_t sbuf_copy_length = std::min(full_body_length, static_cast<size_t>(sbuf_size - pret));
+					body_data.resize(full_body_length, 0);
+					std::copy(sbuf.begin() + pret, sbuf.begin() + pret + sbuf_copy_length, body_data.begin());
+
+					if (full_body_length > sbuf_copy_length)
+						socket_.read(body_data.data() + sbuf_copy_length, full_body_length - sbuf_copy_length);
 				}
 
 				server->pick_route(this);
