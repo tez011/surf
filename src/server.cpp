@@ -73,23 +73,10 @@ void surf_server::pick_route(http_server::session* sn)
 		if (check_mdb_modified_date(sn) == false)
 			api_v1_search(sn, sn->request_param("q").value());
 	} else if (std::regex_match(sn->request_path(), sm, std::regex("/api/v1/stream/([^/]*)"))) {
-		if (check_mdb_modified_date(sn) == false) {
-			int quality = 6;
-			auto qs = sn->request_param("q");
-			if (qs.has_value()) {
-				try {
-					quality = std::stoul(qs.value());
-				} catch (...) {
-					quality = -1;
-				}
-			}
-			api_v1_stream(sn, sm[1], quality);
-		}
+		if (check_mdb_modified_date(sn) == false)
+			api_v1_stream(sn, sm[1]);
 	} else {
-		sn->set_status_code(404);
-		sn->set_response_header("Content-type", "text/plain; charset=utf-8");
-		sn->set_response_header("Content-Length", "11");
-		sn->write("Not Found\r\n", 11);
+		sn->serve_error(404, "Not Found\r\n");
 	}
 }
 

@@ -119,7 +119,7 @@ private:
 
 	/* GET */
 	void api_v1_search(http_server::session* sn, const std::string& q);
-	void api_v1_stream(http_server::session* sn, const std::string& track_uuid, int quality);
+	void api_v1_stream(http_server::session* sn, const std::string& track_uuid);
 
 	void api_v1_stream_cached(http_server::session* sn, const std::string& path_to_tc);
 	void api_v1_transcode(http_server::session* sn, const std::string& track_uuid, const std::string& track_path, int quality);

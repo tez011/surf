@@ -10,8 +10,18 @@ typedef struct {
 	std::FILE* cache_fp;
 } tc_out_mux_t;
 
-void surf_server::api_v1_stream(http_server::session* sn, const std::string& track_uuid, int quality)
+void surf_server::api_v1_stream(http_server::session* sn, const std::string& track_uuid)
 {
+	int quality = 6;
+	auto qs = sn->request_param("q");
+	if (qs.has_value()) {
+		try {
+			quality = std::stoul(qs.value());
+		} catch (...) {
+			quality = -1;
+		}
+	}
+
 	if (quality < 0 || quality > 9)
 		return sn->serve_error(400, "Unexpected value for parameter 'q' (should be an integer from 0-9)\r\n");
 
