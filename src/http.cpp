@@ -68,14 +68,12 @@ void http_server::session::reset()
 	request.headers.clear();
 	request.params.clear();
 	response.headers.clear();
-	parse_buf_len = 0;
 	response.status_code = 0;
 	response.header_written = false;
 }
 
 void http_server::session::start()
 {
-	std::vector<char> sbuf(sbuf_size);
 	int sbuf_off = 0;
 	while (true) {
 		ssize_t r = socket_.read(sbuf.data() + sbuf_off, sbuf_size - sbuf_off);
@@ -90,9 +88,17 @@ void http_server::session::start()
 				request.method = std::string(method, mlen);
 				request.minor_version = minor_ver;
 				for (int i = 0; i < n_headers; i++) {
-					std::string key(headers[i].name, headers[i].name_len);
+					std::string key(headers[i].name, headers[i].name_len), value(headers[i].value, headers[i].value_len);
 					std::transform(key.begin(), key.end(), key.begin(), ::tolower);
-					request.headers[key] = std::string(headers[i].value, headers[i].value_len);
+					request.headers[key] = value;
+
+					if (key == "content-length") {
+						try {
+							full_body_length = std::stoul(value);
+						} catch (...) {
+							full_body_length = 0;
+						}
+					}
 				}
 
 				std::string full_path(path, plen);
@@ -113,6 +119,12 @@ void http_server::session::start()
 						std::string key = url_decode(it->substr(0, split_loc));
 						request.params[key] = url_decode(it->substr(split_loc + 1));
 					}
+				}
+
+				if (full_body_length > 0) {
+					size_t read_length = std::min(full_body_length, static_cast<size_t>(sbuf_size - pret));
+					body_data.resize(read_length, 0);
+					std::copy(sbuf.begin() + pret, sbuf.begin() + pret + read_length, body_data.begin());
 				}
 
 				server->pick_route(this);

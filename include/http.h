@@ -18,10 +18,12 @@ public:
 	class session {
 	private:
 		static constexpr int sbuf_size = 8192;
+		std::array<char, sbuf_size> sbuf;
 		http_server *server;
 		sockpp::tcp_socket socket_;
 
-		size_t parse_buf_len;
+		std::string body_data;
+		size_t full_body_length;
 
 		struct {
 			int minor_version;
@@ -46,10 +48,12 @@ public:
 			return socket_;
 		}
 
-		inline const std::string& request_method() { return request.method; };
+		inline const std::string& request_method() const { return request.method; };
 		inline const std::string& request_path() { return request.url; };
 		inline const std::map<std::string, std::string>& request_headers() { return request.headers; };
 		inline const std::map<std::string, std::string>& request_params() { return request.params; };
+		inline const std::string& request_body() const { return body_data; };
+		inline bool request_slurped() const { return body_data.size() == full_body_length; };
 
 		std::optional<std::string> request_header(const std::string& key) {
 			auto it = request.headers.find(key);
