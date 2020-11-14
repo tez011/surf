@@ -114,6 +114,31 @@ void surf_server::api_v1_plist_GET(http_server::session* sn, const std::string& 
 	write_json(sn, resp);
 }
 
+static void api_v1_plist_filter_tracks(db_connection& dbc, std::vector<std::string>& items)
+{
+	std::ostringstream ss;
+	sqlite3_stmt *stmt = nullptr;
+	int rc;
+
+	ss << "SELECT TRID FROM (SELECT NULL AS TRID\n";
+	for (int i = 0; i < items.size(); i++)
+		ss << "UNION ALL SELECT ?\n";
+	ss << ")\nINNER JOIN TRACKS T ON TRID = T.UUID";
+	if ((rc = sqlite3_prepare_v2(dbc.handle(), ss.str().c_str(), -1, &stmt, nullptr)) != SQLITE_OK)
+		throw std::runtime_error("could not prepare PUT.3 /api/v1/plist SQL");
+	for (int i = 0; i < items.size(); i++)
+		sqlite3_bind_text(stmt, i + 1, items[i].c_str(), -1, SQLITE_TRANSIENT);
+
+	items.clear();
+	while ((rc = sqlite3_step(stmt)) != SQLITE_DONE) {
+		if (rc == SQLITE_MISUSE)
+			throw std::runtime_error("sqlite misuse at " __FILE__ "@" + std::to_string(__LINE__) + ".");
+		else if (rc == SQLITE_ROW) {
+			items.push_back(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0)));
+		}
+	}
+}
+
 void surf_server::api_v1_plist_insert(http_server::session* sn, const std::string& plist_uuid)
 {
 	sn->serve_error(501, "Not implemented\r\n");
@@ -129,18 +154,8 @@ void surf_server::api_v1_plist_remove(http_server::session* sn, const std::strin
 	sn->serve_error(501, "Not implemented\r\n");
 }
 
-void surf_server::api_v1_plist_PUT(http_server::session* sn, const std::string& plist_uuid)
+static void api_v1_plist_clear(db_connection& dbc, const std::string& plist_uuid)
 {
-	int content_length;
-	try {
-		content_length = std::stoul(sn->request_header("content-length").value());
-	} catch (...) {
-		content_length = 0;
-	}
-	if (content_length == 0)
-		return sn->serve_error(400, "Bad Request: no body present\r\n");
-
-	db_connection dbc = mdb.dbconn();
 	sqlite3_stmt *stmt = nullptr;
 	int rc;
 
@@ -152,6 +167,22 @@ void surf_server::api_v1_plist_PUT(http_server::session* sn, const std::string& 
 	if (rc == SQLITE_MISUSE)
 		throw std::runtime_error("sqlite misuse at " __FILE__ "@" + std::to_string(__LINE__) + ".");
 	sqlite3_finalize(stmt);
+}
+
+void surf_server::api_v1_plist_PUT(http_server::session* sn, const std::string& plist_uuid)
+{
+	int content_length, rc;
+	try {
+		content_length = std::stoul(sn->request_header("content-length").value());
+	} catch (...) {
+		content_length = 0;
+	}
+	if (content_length == 0)
+		return sn->serve_error(400, "Bad Request: no body present\r\n");
+
+	db_connection dbc = mdb.dbconn();
+	sqlite3_stmt *stmt = nullptr;
+	api_v1_plist_clear(dbc, plist_uuid);
 
 	if (sn->request_param("name").has_value()) {
 		std::string pl_name = sn->request_param("name").value();
@@ -167,8 +198,10 @@ void surf_server::api_v1_plist_PUT(http_server::session* sn, const std::string& 
 			throw std::runtime_error("sqlite misuse at " __FILE__ "@" + std::to_string(__LINE__) + ".");
 	}
 
-	std::ostringstream ss;
 	auto items = tokenize(sn->request_body(), ",\n");
+	api_v1_plist_filter_tracks(dbc, items);
+
+	std::ostringstream ss;
 	ss << "INSERT INTO PLAYLISTTRACKS (PLAYLIST, RANK, TRACK) VALUES ";
 	for (int i = 0; i < items.size(); i++) {
 		if (i != 0)
@@ -176,7 +209,7 @@ void surf_server::api_v1_plist_PUT(http_server::session* sn, const std::string& 
 		ss << "(?,?,?)";
 	}
 	if ((rc = sqlite3_prepare_v2(dbc.handle(), ss.str().c_str(), -1, &stmt, nullptr)) != SQLITE_OK)
-		throw std::runtime_error("could not prepare PUT.3 /api/v1/plist SQL");
+		throw std::runtime_error("could not prepare PUT.4 /api/v1/plist SQL");
 	for (int i = 0; i < items.size(); i++) {
 		sqlite3_bind_text(stmt, 3 * i + 1, plist_uuid.c_str(), -1, SQLITE_STATIC);
 		sqlite3_bind_int(stmt, 3 * i + 2, i + 1);
@@ -198,14 +231,7 @@ void surf_server::api_v1_plist_DELETE(http_server::session* sn, const std::strin
 	db_connection dbc = mdb.dbconn();
 	sqlite3_stmt *stmt = nullptr;
 	int rc;
-	if ((rc = sqlite3_prepare_v2(dbc.handle(), "DELETE FROM PLAYLISTTRACKS WHERE PLAYLIST = ?", -1, &stmt, nullptr)) != SQLITE_OK)
-		throw std::runtime_error("could not prepare DELETE /api/v1/plist SQL");
-	sqlite3_bind_text(stmt, 1, plist_uuid.c_str(), -1, SQLITE_STATIC);
-
-	do { rc = sqlite3_step(stmt); } while (rc == SQLITE_BUSY);
-	if (rc == SQLITE_MISUSE)
-		throw std::runtime_error("sqlite misuse at " __FILE__ "@" + std::to_string(__LINE__) + ".");
-	sqlite3_finalize(stmt);
+	api_v1_plist_clear(dbc, plist_uuid);
 
 	if ((rc = sqlite3_prepare_v2(dbc.handle(), "DELETE FROM PLAYLISTS WHERE UUID = ?", -1, &stmt, nullptr)) != SQLITE_OK)
 		throw std::runtime_error("could not prepare DELETE /api/v1/plist SQL");
