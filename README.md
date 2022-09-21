@@ -2,6 +2,8 @@
 
 A streaming music server for your personal collection.
 
+This tool is retired. I switched to a subscription service and don't maintain a music library anymore.
+
 ## Build Instructions
 
 Please install the following dependencies:
